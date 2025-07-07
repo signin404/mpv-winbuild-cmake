@@ -1,4 +1,4 @@
-/*
+/*.
  * This file is part of mpv.
  *
  * mpv is free software; you can redistribute it and/or
@@ -41,12 +41,12 @@ struct d3d11_opts {
 
 #define OPT_BASE_STRUCT struct d3d11_opts
 const struct m_sub_options d3d11_conf = {
-    .opts = (const struct m_option[]) {
+    。opts = (const struct m_option[]) {
         {"d3d11-warp", OPT_CHOICE(warp,
             {"auto", -1},
             {"no", 0},
             {"yes", 1}),
-             .flags = UPDATE_VO,
+             。flags = UPDATE_VO,
         },
         {"d3d11-feature-level", OPT_CHOICE(feature_level,
             {"12_1", D3D_FEATURE_LEVEL_12_1},
@@ -58,7 +58,7 @@ const struct m_sub_options d3d11_conf = {
             {"9_3", D3D_FEATURE_LEVEL_9_3},
             {"9_2", D3D_FEATURE_LEVEL_9_2},
             {"9_1", D3D_FEATURE_LEVEL_9_1}),
-            .flags = UPDATE_VO,
+            。flags = UPDATE_VO,
         },
         {"d3d11-flip", OPT_BOOL(flip), .flags = UPDATE_VO},
         {"d3d11-sync-interval", OPT_INT(sync_interval), M_RANGE(0, 4)},

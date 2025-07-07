@@ -1,4 +1,4 @@
-/*.
+/*
  * This file is part of mpv.
  *
  * mpv is free software; you can redistribute it and/or
@@ -36,18 +36,15 @@ struct d3d11_opts {
     int output_format;
     int color_space;
     bool exclusive_fs;
-    int output_mode;
 };
 
 #define OPT_BASE_STRUCT struct d3d11_opts
 const struct m_sub_options d3d11_conf = {
-    。opts = (const struct m_option[]) {
+    .opts = (const struct m_option[]) {
         {"d3d11-warp", OPT_CHOICE(warp,
             {"auto", -1},
             {"no", 0},
-            {"yes", 1}),
-             。flags = UPDATE_VO,
-        },
+            {"yes", 1})},
         {"d3d11-feature-level", OPT_CHOICE(feature_level,
             {"12_1", D3D_FEATURE_LEVEL_12_1},
             {"12_0", D3D_FEATURE_LEVEL_12_0},
@@ -57,38 +54,24 @@ const struct m_sub_options d3d11_conf = {
             {"10_0", D3D_FEATURE_LEVEL_10_0},
             {"9_3", D3D_FEATURE_LEVEL_9_3},
             {"9_2", D3D_FEATURE_LEVEL_9_2},
-            {"9_1", D3D_FEATURE_LEVEL_9_1}),
-            。flags = UPDATE_VO,
-        },
-        {"d3d11-flip", OPT_BOOL(flip), .flags = UPDATE_VO},
+            {"9_1", D3D_FEATURE_LEVEL_9_1})},
+        {"d3d11-flip", OPT_BOOL(flip)},
         {"d3d11-sync-interval", OPT_INT(sync_interval), M_RANGE(0, 4)},
-        {"d3d11-adapter",
-            OPT_STRING_VALIDATE(adapter_name, mp_dxgi_validate_adapter),
-            .flags = UPDATE_VO,
-        },
+        {"d3d11-adapter", OPT_STRING_VALIDATE(adapter_name,
+                                              mp_dxgi_validate_adapter)},
         {"d3d11-output-format", OPT_CHOICE(output_format,
             {"auto",     DXGI_FORMAT_UNKNOWN},
             {"rgba8",    DXGI_FORMAT_R8G8B8A8_UNORM},
             {"bgra8",    DXGI_FORMAT_B8G8R8A8_UNORM},
             {"rgb10_a2", DXGI_FORMAT_R10G10B10A2_UNORM},
-            {"rgba16f",  DXGI_FORMAT_R16G16B16A16_FLOAT}),
-            .flags = UPDATE_VO,
-        },
+            {"rgba16f",  DXGI_FORMAT_R16G16B16A16_FLOAT})},
         {"d3d11-output-csp", OPT_CHOICE(color_space,
             {"auto", -1},
             {"srgb",    DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709},
             {"linear",  DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709},
             {"pq",      DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020},
-            {"bt.2020", DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020}),
-            .flags = UPDATE_VO,
-        },
+            {"bt.2020", DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020})},
         {"d3d11-exclusive-fs", OPT_BOOL(exclusive_fs)},
-        {"d3d11-output-mode", OPT_CHOICE(output_mode,
-            {"auto", -1},
-            {"window", 0},
-            {"composition", 1}),
-            .flags = UPDATE_VO,
-        },
         {0}
     },
     .defaults = &(const struct d3d11_opts) {
@@ -99,7 +82,6 @@ const struct m_sub_options d3d11_conf = {
         .adapter_name = NULL,
         .output_format = DXGI_FORMAT_UNKNOWN,
         .color_space = -1,
-        .output_mode = -1,
     },
     .size = sizeof(struct d3d11_opts)
 };
@@ -165,8 +147,7 @@ static bool resize(struct ra_ctx *ctx)
 
 static bool d3d11_reconfig(struct ra_ctx *ctx)
 {
-    if (!ctx->opts.composition)
-        vo_w32_config(ctx->vo);
+    vo_w32_config(ctx->vo);
     return resize(ctx);
 }
 
@@ -175,8 +156,8 @@ static int d3d11_color_depth(struct ra_swapchain *sw)
     struct priv *p = sw->priv;
 
     DXGI_OUTPUT_DESC1 desc1;
-    if (!mp_get_dxgi_output_desc(p->swapchain, &desc1))
-        desc1.BitsPerColor = 0;
+    if (mp_get_dxgi_output_desc(p->swapchain, &desc1))
+        return desc1.BitsPerColor;
 
     DXGI_SWAP_CHAIN_DESC desc;
 
@@ -184,62 +165,15 @@ static int d3d11_color_depth(struct ra_swapchain *sw)
     if (FAILED(hr)) {
         MP_ERR(sw->ctx, "Failed to query swap chain description: %s!\n",
                mp_HRESULT_to_str(hr));
-        return desc1.BitsPerColor;
+        return 0;
     }
 
     const struct ra_format *ra_fmt =
         ra_d3d11_get_ra_format(sw->ctx->ra, desc.BufferDesc.Format);
-    if (!ra_fmt || !ra_fmt->component_depth[0])
-        return desc1.BitsPerColor;
+    if (!ra_fmt)
+        return 0;
 
-    if (!desc1.BitsPerColor)
-        return ra_fmt->component_depth[0];
-
-    return MPMIN(ra_fmt->component_depth[0], desc1.BitsPerColor);
-}
-
-static struct pl_color_space d3d11_target_color_space(struct ra_swapchain *sw)
-{
-    struct priv *p = sw->priv;
-
-    struct pl_color_space ret = {0};
-    DXGI_OUTPUT_DESC1 desc1;
-    if (!mp_get_dxgi_output_desc(p->swapchain, &desc1))
-        return ret;
-
-    ret.hdr.max_luma = desc1.MaxLuminance;
-    ret.hdr.min_luma = desc1.MinLuminance;
-    ret.hdr.prim.blue.x = desc1.BluePrimary[0];
-    ret.hdr.prim.blue.y = desc1.BluePrimary[1];
-    ret.hdr.prim.green.x = desc1.GreenPrimary[0];
-    ret.hdr.prim.green.y = desc1.GreenPrimary[1];
-    ret.hdr.prim.red.x = desc1.RedPrimary[0];
-    ret.hdr.prim.red.y = desc1.RedPrimary[1];
-
-    switch (desc1.ColorSpace) {
-        case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
-            ret.primaries = PL_COLOR_PRIM_BT_709;
-            ret.transfer = PL_COLOR_TRC_SRGB;
-            break;
-        case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
-            ret.primaries = PL_COLOR_PRIM_BT_709;
-            ret.transfer = PL_COLOR_TRC_LINEAR;
-            break;
-        case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
-            ret.primaries = PL_COLOR_PRIM_BT_2020;
-            ret.transfer = PL_COLOR_TRC_PQ;
-            break;
-        case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020:
-            ret.primaries = PL_COLOR_PRIM_BT_2020;
-            ret.transfer = PL_COLOR_TRC_SRGB;
-            break;
-        default:
-            ret.primaries = PL_COLOR_PRIM_UNKNOWN;
-            ret.transfer = PL_COLOR_TRC_UNKNOWN;
-            break;
-    }
-
-    return ret;
+    return ra_fmt->component_depth[0];
 }
 
 static bool d3d11_start_frame(struct ra_swapchain *sw, struct ra_fbo *out_fbo)
@@ -249,7 +183,7 @@ static bool d3d11_start_frame(struct ra_swapchain *sw, struct ra_fbo *out_fbo)
     if (!out_fbo)
         return true;
 
-    mp_assert(!p->backbuffer);
+    assert(!p->backbuffer);
 
     p->backbuffer = get_backbuffer(sw->ctx);
     if (!p->backbuffer)
@@ -350,21 +284,22 @@ static void d3d11_get_vsync(struct ra_swapchain *sw, struct vo_vsync_info *info)
     // Detecting skipped vsyncs is possible but not supported yet
     info->skipped_vsyncs = -1;
 
-    // Get the number of physical vsyncs that have passed since the last call.
+    // Get the number of physical vsyncs that have passed since the start of the
+    // playback or disjoint event.
     // Check for 0 here, since sometimes GetFrameStatistics returns S_OK but
     // with 0s in some (all?) members of DXGI_FRAME_STATISTICS.
     unsigned src_passed = 0;
     if (stats.SyncRefreshCount && p->sync_refresh_count)
         src_passed = stats.SyncRefreshCount - p->sync_refresh_count;
     if (p->sync_refresh_count == 0)
-		p->sync_refresh_count = stats.SyncRefreshCount;
+        p->sync_refresh_count = stats.SyncRefreshCount;
 
     // Get the elapsed time passed between the above vsyncs
     unsigned sqt_passed = 0;
     if (stats.SyncQPCTime.QuadPart && p->sync_qpc_time)
         sqt_passed = stats.SyncQPCTime.QuadPart - p->sync_qpc_time;
     if (p->sync_qpc_time == 0)
-		p->sync_qpc_time = stats.SyncQPCTime.QuadPart;
+        p->sync_qpc_time = stats.SyncQPCTime.QuadPart;
 
     // If any vsyncs have passed, estimate the physical frame rate
     if (src_passed && sqt_passed)
@@ -467,7 +402,7 @@ static int d3d11_control(struct ra_ctx *ctx, int *events, int request, void *arg
         fullscreen_switch_needed = false;
     }
 
-    ret = ctx->opts.composition ? VO_TRUE : vo_w32_control(ctx->vo, events, request, arg);
+    ret = vo_w32_control(ctx->vo, events, request, arg);
 
     // if entering full screen, handle d3d11 after general windowing stuff
     if (fullscreen_switch_needed && p->vo_opts->fullscreen) {
@@ -494,11 +429,7 @@ static void d3d11_uninit(struct ra_ctx *ctx)
     if (ctx->ra)
         ra_tex_free(ctx->ra, &p->backbuffer);
     SAFE_RELEASE(p->swapchain);
-    if (!ctx->opts.composition) {
-        vo_w32_uninit(ctx->vo);
-    } else {
-        vo_w32_swapchain(ctx->vo, NULL);
-    }
+    vo_w32_uninit(ctx->vo);
     SAFE_RELEASE(p->device);
 
     // Destroy the RA last to prevent objects we hold from showing up in D3D's
@@ -509,7 +440,6 @@ static void d3d11_uninit(struct ra_ctx *ctx)
 
 static const struct ra_swapchain_fns d3d11_swapchain = {
     .color_depth  = d3d11_color_depth,
-    .target_csp   = d3d11_target_color_space,
     .start_frame  = d3d11_start_frame,
     .submit_frame = d3d11_submit_frame,
     .swap_buffers = d3d11_swap_buffers,
@@ -551,11 +481,10 @@ static bool d3d11_init(struct ra_ctx *ctx)
     if (!ctx->ra)
         goto error;
 
-    ctx->opts.composition = p->opts->output_mode == 1;
-    if (!ctx->opts.composition && !vo_w32_init(ctx->vo))
+    if (!vo_w32_init(ctx->vo))
         goto error;
 
-    if (!ctx->opts.composition && ctx->opts.want_alpha)
+    if (ctx->opts.want_alpha)
         vo_w32_set_transparency(ctx->vo, ctx->opts.want_alpha);
 
     UINT usage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT;
@@ -566,7 +495,7 @@ static bool d3d11_init(struct ra_ctx *ctx)
     }
 
     struct d3d11_swapchain_opts scopts = {
-        .window = ctx->opts.composition ? NULL : vo_w32_hwnd(ctx->vo),
+        .window = vo_w32_hwnd(ctx->vo),
         .width = ctx->vo->dwidth,
         .height = ctx->vo->dheight,
         .format = p->opts->output_format,
@@ -581,9 +510,6 @@ static bool d3d11_init(struct ra_ctx *ctx)
     if (!mp_d3d11_create_swapchain(p->device, ctx->log, &scopts, &p->swapchain))
         goto error;
 
-    if (ctx->opts.composition)
-        vo_w32_swapchain(ctx->vo, p->swapchain);
-
     return true;
 
 error:
@@ -593,8 +519,6 @@ error:
 
 static void d3d11_update_render_opts(struct ra_ctx *ctx)
 {
-    if (ctx->opts.composition)
-        return;
     vo_w32_set_transparency(ctx->vo, ctx->opts.want_alpha);
 }
 
